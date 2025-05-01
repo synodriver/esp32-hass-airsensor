@@ -255,7 +255,7 @@ discovery_payload = {
             "name": "紫外线传感器Wfac",
             "value_template": "{{value_json.Wfac}}",
             "unique_id": "%s.Wfac" % object_id,
-            "min": 0,
+            "min": 1,
             "max": 10,
             "step": 0.01,
             # "entity_category": "diagnostic",

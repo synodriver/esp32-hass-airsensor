@@ -155,7 +155,30 @@ class LTR390:
         self._write_reg(self.REG_INT_CFG, 0x34)
         self.set_mode(self.MODE_UVS)
         raw = self._read_data_reg()
-        return raw * 0.01  # 根据手册转换为UV指数
+        gain = self.get_gain()
+        if gain == self.GAIN_1:
+            gain = 1
+        elif gain == self.GAIN_3:
+            gain = 3
+        elif gain == self.GAIN_6:
+            gain = 6
+        elif gain == self.GAIN_9:
+            gain = 9
+        elif gain == self.GAIN_18:
+            gain = 18
+        re, _ = self.get_resolution_rate()
+        if re == self.RESOLUTION_16BIT_TIME25MS:  # 积分时间
+            re = 0.25
+        elif re == self.RESOLUTION_17BIT_TIME50MS:
+            re = 0.5
+        elif re == self.RESOLUTION_18BIT_TIME100MS:
+            re = 1
+        elif re == self.RESOLUTION_19BIT_TIME200MS:
+            re = 2
+        elif re == self.RESOLUTION_20BIT_TIME400MS:
+            re = 4
+        sensitivity = 2300 * gain / 18 * re / 4
+        return raw / sensitivity * self.wfac # https://esphome.io/components/sensor/ltr390
 
     def read_als(self):
         """读取环境光数据（需要先设置为ALS模式）"""
@@ -174,7 +197,7 @@ class LTR390:
         elif gain == self.GAIN_18:
             gain = 18
         re, _ = self.get_resolution_rate()
-        if re == self.RESOLUTION_16BIT_TIME25MS:
+        if re == self.RESOLUTION_16BIT_TIME25MS:  # 积分时间
             re = 0.25
         elif re == self.RESOLUTION_17BIT_TIME50MS:
             re = 0.5
@@ -184,7 +207,7 @@ class LTR390:
             re = 2
         elif re == self.RESOLUTION_20BIT_TIME400MS:
             re = 4
-        return 0.6 * raw / gain / re * self.wfac  # 根据手册转换为lux
+        return 0.6 * raw / gain / re * self.wfac  # https://esphome.io/components/sensor/ltr390
 
     # @property
     # def data_ready(self):
