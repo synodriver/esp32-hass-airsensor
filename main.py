@@ -2,6 +2,10 @@
 """
 Copyright (c) 2008-2025 synodriver <diguohuangjiajinweijun@gmail.com>
 """
+import binascii
+
+from ltr390 import LTR390
+
 try:
     import uasyncio as asyncio
 except ImportError:
@@ -17,7 +21,7 @@ from airmod001 import AirMod
 
 # 默认配置
 DEFAULT_CONFIG = {
-    'wifi_ssid': '',#
+    'wifi_ssid': '',  #
     'wifi_password': '',
     'ap_ssid': 'ESP32-Config',
     'ap_password': '',
@@ -48,6 +52,7 @@ def load_config():
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG.copy()
 
+
 def save_config(config):
     """保存配置到文件"""
     with open(CONFIG_FILE, 'w') as f:
@@ -70,7 +75,7 @@ availability_topic = "%s/%s/%s/availability" % (discovery_prefix, component, obj
 state_topic = "%s/%s/%s/state" % (discovery_prefix, component, object_id)
 command_topic = "%s/%s/%s/set" % (discovery_prefix, component, object_id)
 
-#ap = network.WLAN(network.AP_IF)  # fail back
+# ap = network.WLAN(network.AP_IF)  # fail back
 
 # async def setup_ap(activate=True):
 #     """设置或关闭AP热点模式"""
@@ -88,6 +93,10 @@ command_topic = "%s/%s/%s/set" % (discovery_prefix, component, object_id)
 #         print('关闭AP热点...')
 #         ap.active(False)
 #
+# 可以通过mqtt的number组件来设置
+# runtime_cfg = {
+#     "update_interval": 1,  # seconds
+# }
 
 discovery_payload = {
     "device": {
@@ -109,35 +118,35 @@ discovery_payload = {
             "platform": "sensor",
             "device_class": "temperature",
             "unit_of_measurement": "°C",
-            "value_template": "{{ value_json.temperature}}",
+            "value_template": "{{value_json.temperature}}",
             "unique_id": "%s.temperature" % object_id
         },
         "%s.humidity" % object_id: {
             "platform": "sensor",
             "device_class": "humidity",
             "unit_of_measurement": "%",
-            "value_template": "{{ value_json.humidity}}",
+            "value_template": "{{value_json.humidity}}",
             "unique_id": "%s.humidity" % object_id
         },
         "%s.tvoc" % object_id: {
             "platform": "sensor",
             "device_class": "volatile_organic_compounds",
             "unit_of_measurement": "µg/m³",
-            "value_template": "{{ value_json.voc}}",
+            "value_template": "{{value_json.voc}}",
             "unique_id": "%s.tvoc" % object_id
         },
         "%s.pm25" % object_id: {
             "platform": "sensor",
             "device_class": "pm25",
             "unit_of_measurement": "µg/m³",
-            "value_template": "{{ value_json.pm25}}",
+            "value_template": "{{value_json.pm25}}",
             "unique_id": "%s.pm25" % object_id
         },
         "%s.pm10" % object_id: {
             "platform": "sensor",
             "device_class": "pm10",
             "unit_of_measurement": "µg/m³",
-            "value_template": "{{ value_json.pm10}}",
+            "value_template": "{{value_json.pm10}}",
             "unique_id": "%s.pm10" % object_id
         },
         "%s.ch2o" % object_id: {
@@ -145,20 +154,117 @@ discovery_payload = {
             "icon": "mdi:chemical-weapon",
             "name": "甲醛",
             "unit_of_measurement": "µg/m³",
-            "value_template": "{{ value_json.ch2o}}",
+            "value_template": "{{value_json.ch2o}}",
             "unique_id": "%s.ch2o" % object_id
         },
         "%s.co2" % object_id: {
             "platform": "sensor",
             "device_class": "carbon_dioxide",
             "unit_of_measurement": "ppm",
-            "value_template": "{{ value_json.co2}}",
+            "value_template": "{{value_json.co2}}",
             "unique_id": "%s.co2" % object_id
         },
+        "%s.light" % object_id: {
+            "platform": "sensor",
+            "device_class": "illuminance",
+            "unit_of_measurement": "lx",
+            "value_template": "{{value_json.light}}",
+            "unique_id": "%s.light" % object_id
+        },
+        "%s.uv" % object_id: {
+            "platform": "sensor",
+            "name": "紫外线指数",
+            "unit_of_measurement": "UV index",
+            "value_template": "{{value_json.uv}}",
+            "unique_id": "%s.uv" % object_id
+        },
 
+        "%s.ip_address" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:ip",
+            "name": "IP地址",
+            "value_template": "{{value_json.ip_address}}",
+            "unique_id": "%s.ip_address" % object_id,
+            "entity_category": "diagnostic"
+        },
+        "%s.ssid" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:wifi",
+            "name": "SSID",
+            "value_template": "{{value_json.ssid}}",
+            "unique_id": "%s.ssid" % object_id,
+            "entity_category": "diagnostic"
+        },
+        "%s.essid" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:wifi",
+            "name": "ESSID",
+            "value_template": "{{value_json.essid}}",
+            "unique_id": "%s.essid" % object_id.encode(),
+            "entity_category": "diagnostic"
+        },
+        "%s.mac_address" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:wifi",
+            "name": "MAC",
+            "value_template": "{{value_json.mac_address}}",
+            "unique_id": "%s.mac_address" % object_id,
+            "entity_category": "diagnostic"
+        },
+        "%s.dns_address" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:dns",
+            "name": "DNS",
+            "value_template": "{{value_json.dns_address}}",
+            "unique_id": "%s.dns_address" % object_id,
+            "entity_category": "diagnostic"
+        },
+        "%s.txpower" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:wifi",
+            "name": "发射功率",
+            "value_template": "{{value_json.txpower}}",
+            "unique_id": "%s.txpower" % object_id,
+            "unit_of_measurement": "dBm",
+            "entity_category": "diagnostic"
+        },
+
+        "%s.uvs_resolution" % object_id: {
+            "platform": "select",
+            "icon": "mdi:numeric",
+            "name": "紫外线传感器分辨率",
+            "value_template": "{{value_json.uvs_resolution}}",
+            "unique_id": "%s.uvs_resolution" % object_id,
+            "options": [20, 19, 18, 17, 16, 13],
+            # "entity_category": "diagnostic",
+            "command_template": "{\"uvs_resolution\":  {{value}}}",
+        },
+        "%s.uvs_rate" % object_id: {
+            "platform": "select",
+            "icon": "mdi:numeric",
+            "name": "紫外线传感器测量速率",
+            "value_template": "{{value_json.uvs_rate}}",
+            "unique_id": "%s.uvs_rate" % object_id,
+            "options": ["25ms", "50ms", "100ms", "200ms", "500ms", "1000ms", "2000ms"],
+            # "entity_category": "diagnostic",
+            "command_template": "{\"uvs_rate\":  \"{{value}}\"}",
+        },
+        "%s.Wfac" % object_id: {
+            "platform": "number",
+            "icon": "mdi:numeric",
+            "name": "紫外线传感器Wfac",
+            "value_template": "{{value_json.Wfac}}",
+            "unique_id": "%s.Wfac" % object_id,
+            "min": 0,
+            "max": 10,
+            "step": 0.01,
+            # "entity_category": "diagnostic",
+            "command_template": "{\"Wfac\":  {{value}}}",
+        }
     },
     "state_topic": state_topic,
     "availability_topic": availability_topic,
+    "command_topic": command_topic,
     "qos": 1
 }
 
@@ -186,28 +292,73 @@ client = MQTTClient(config)
 #     print((topic, msg, retained, properties))
 
 
-async def read_sensors(client: MQTTClient):
-    print("Reading sensors...")
-    try:
-        airmod = AirMod(2,17, 16)
-    except Exception as e:
-        print(f"create uart fail: {e}")
-        return
-    print("Connected to uart")
+async def read_sensors(client: MQTTClient, airmod: AirMod, ltr390: LTR390):
     while True:
         print("read sensor")
         await airmod.has_data.wait()
         airmod.has_data.clear()
         data = airmod.data
+        data.update(get_wifi_data(client))
+        data.update(get_ltr390_data(ltr390))
         asyncio.create_task(client.publish(state_topic.encode(), json.dumps(data).encode(), qos=1))  # do not block
 
 
+def get_wifi_data(client: MQTTClient):
+    attr_data = {"ip_address": client._sta_if.ifconfig()[0],
+                 "ssid": client._sta_if.config('ssid'),
+                 "essid": client._sta_if.config('essid'),
+                 "mac_address": binascii.hexlify(client._sta_if.config('mac')).upper(),
+                 "dns_address": client._sta_if.ifconfig()[3],
+                 "txpower": client._sta_if.config('txpower'),
+                 }
+    return attr_data
+
+
+def get_ltr390_data(ltr390: LTR390):
+    re, rate = ltr390.get_resolution_rate()
+    if re == LTR390.RESOLUTION_13BIT_TIME12_5MS:
+        re = 13
+    elif re == LTR390.RESOLUTION_16BIT_TIME25MS:
+        re = 16
+    elif re == LTR390.RESOLUTION_17BIT_TIME50MS:
+        re = 17
+    elif re == LTR390.RESOLUTION_18BIT_TIME100MS:
+        re = 18
+    elif re == LTR390.RESOLUTION_19BIT_TIME200MS:
+        re = 19
+    elif re == LTR390.RESOLUTION_20BIT_TIME400MS:
+        re = 20
+
+    if rate == LTR390.RATE_25MS:
+        rate = "25ms"
+    elif rate == LTR390.RATE_50MS:
+        rate = "50ms"
+    elif rate == LTR390.RATE_100MS:
+        rate = "100ms"
+    elif rate == LTR390.RATE_200MS:
+        rate = "200ms"
+    elif rate == LTR390.RATE_500MS:
+        rate = "500ms"
+    elif rate == LTR390.RATE_1000MS:
+        rate = "1000ms"
+    elif rate == LTR390.RATE_2000MS:
+        rate = "2000ms"
+    attr_data = {
+        "light": ltr390.read_als(),
+        "uv": ltr390.read_uvs(),
+        "uvs_resolution": re,
+        "uvs_rate": rate,
+        "Wfac": ltr390.wfac,
+    }
+    return attr_data
+
+
 async def handle_online(client: MQTTClient):
-    #global ap
+    # global ap
     while True:
         await client.up.wait()
         client.up.clear()
-        #await setup_ap(False)
+        # await setup_ap(False)
         await client.publish(availability_topic.encode(), b"online", retain=True, qos=1)
 
 
@@ -215,7 +366,45 @@ async def handle_offline():
     while True:
         await client.down.wait()
         client.down.clear()
-        #await setup_ap(True)
+        # await setup_ap(True)
+
+
+async def listen_mqtt(client: MQTTClient, ltr390: LTR390):
+    resolution_map = {
+        20: LTR390.RESOLUTION_20BIT_TIME400MS,
+        19: LTR390.RESOLUTION_19BIT_TIME200MS,
+        18: LTR390.RESOLUTION_18BIT_TIME100MS,
+        17: LTR390.RESOLUTION_17BIT_TIME50MS,
+        16: LTR390.RESOLUTION_16BIT_TIME25MS,
+        13: LTR390.RESOLUTION_13BIT_TIME12_5MS,
+    }
+    rate_map = {
+        "25ms": LTR390.RATE_25MS,
+        "50ms": LTR390.RATE_50MS,
+        "100ms": LTR390.RATE_100MS,
+        "200ms": LTR390.RATE_200MS,
+        "500ms": LTR390.RATE_500MS,
+        "1000ms": LTR390.RATE_1000MS,
+        "2000ms": LTR390.RATE_2000MS,
+    }
+    async for topic, msg, retained, properties in client.queue:
+        if topic == command_topic.encode():
+            print(f"Received command: {msg.decode()}")
+            payload = json.loads(msg.decode())
+            if "uvs_resolution" in payload:
+                print("change uvs_resolution")
+                uvs_resolution: int = payload["uvs_resolution"]
+                _, rate = ltr390.get_resolution_rate()
+                ltr390.set_resolution_rate(resolution_map[uvs_resolution], rate)
+            if "uvs_rate" in payload:
+                print("change uvs_rate")
+                uvs_rate: str = payload["uvs_rate"]
+                resolution, _ = ltr390.get_resolution_rate()
+                ltr390.set_resolution_rate(resolution, rate_map[uvs_rate])
+            if "Wfac" in payload:
+                print("change Wfac")
+                Wfac: float = payload["Wfac"]
+                ltr390.wfac = Wfac
 
 
 async def main(client: MQTTClient):
@@ -226,12 +415,27 @@ async def main(client: MQTTClient):
         await client.up.wait()
         client.up.clear()
         print("client ready")
+        await client.subscribe(command_topic.encode(), qos=1)
+
         await client.publish(discovery_topic.encode(), json.dumps(discovery_payload).encode(), retain=True, qos=1)
         await client.publish(availability_topic.encode(), b"online", retain=True, qos=1)
         print("online info published")
-        #asyncio.create_task(handle_online(client))
-        #asyncio.create_task(handle_offline())
-        await read_sensors(client)
+        try:
+            airmod = AirMod(2, 17, 16)
+        except Exception as e:
+            print(f"create uart fail: {e}")
+            return
+        print("Connected to airmod uart")
+        try:
+            ltr390 = LTR390(1, 18, 19)
+        except Exception as e:
+            print(f"create ltr390 iic fail: {e}")
+            return
+        print("Connected to ltr390 iic uv sensor")
+        # asyncio.create_task(handle_online(client))
+        # asyncio.create_task(handle_offline())
+        asyncio.create_task(listen_mqtt(client, ltr390))
+        await read_sensors(client, airmod, ltr390)
     except OSError as e:
         print(f"Connection failed: {str(e)}.")
         return
