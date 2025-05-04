@@ -31,6 +31,7 @@ DEFAULT_CONFIG = {
     "broker_port": 1883,
     "broker_user": "",
     "broker_password": "",
+    "debug": True
 }
 
 # 配置文件路径
@@ -60,6 +61,11 @@ def save_config(config):
 
 
 netconfig = load_config()
+debug = netconfig["debug"]
+
+def dprint(*args, **kwargs):
+    if debug:
+        print(*args, **kwargs)
 
 BROKER_IP = netconfig["broker_ip"]
 BROKER_PORT = netconfig["broker_port"]
@@ -232,12 +238,12 @@ discovery_payload = {
         "%s.uvs_resolution" % object_id: {
             "platform": "select",
             "icon": "mdi:numeric",
-            "name": "紫外线传感器分辨率",
+            "name": "紫外线传感器分辨率(位)",
             "value_template": "{{value_json.uvs_resolution}}",
             "unique_id": "%s.uvs_resolution" % object_id,
-            "options": [20, 19, 18, 17, 16, 13],
+            "options": ["20", "19", "18", "17", "16", "13"],  # option list must be List[str]
             # "entity_category": "diagnostic",
-            "command_template": "{\"uvs_resolution\":  {{value}}}",
+            "command_template": "{\"uvs_resolution\":  \"{{value}}}\"",
         },
         "%s.uvs_rate" % object_id: {
             "platform": "select",
@@ -246,8 +252,16 @@ discovery_payload = {
             "value_template": "{{value_json.uvs_rate}}",
             "unique_id": "%s.uvs_rate" % object_id,
             "options": ["25ms", "50ms", "100ms", "200ms", "500ms", "1000ms", "2000ms"],
-            # "entity_category": "diagnostic",
             "command_template": "{\"uvs_rate\":  \"{{value}}\"}",
+        },
+        "%s.uvs_gain" % object_id: {
+            "platform": "select",
+            "icon": "mdi:numeric",
+            "name": "紫外线传感器增益",
+            "value_template": "{{value_json.uvs_gain}}",
+            "unique_id": "%s.uvs_gain" % object_id,
+            "options": ["1", "3", "6", "9", "18"],
+            "command_template": "{\"uvs_gain\":  \"{{value}}\"}",
         },
         "%s.Wfac" % object_id: {
             "platform": "number",
@@ -258,7 +272,6 @@ discovery_payload = {
             "min": 1,
             "max": 10,
             "step": 0.01,
-            # "entity_category": "diagnostic",
             "command_template": "{\"Wfac\":  {{value}}}",
         }
     },
@@ -282,7 +295,7 @@ config["keepalive"] = 60
 config["queue_len"] = 4
 config["ssid"] = netconfig["wifi_ssid"]
 config["wifi_pw"] = netconfig["wifi_password"]
-print(config)
+dprint(config)
 # The rest of the configuration
 client = MQTTClient(config)
 
@@ -294,12 +307,13 @@ client = MQTTClient(config)
 
 async def read_sensors(client: MQTTClient, airmod: AirMod, ltr390: LTR390):
     while True:
-        print("read sensor")
         await airmod.has_data.wait()
         airmod.has_data.clear()
         data = airmod.data
+        dprint("got airmod data")
         data.update(get_wifi_data(client))
-        data.update(get_ltr390_data(ltr390))
+        data.update(await get_ltr390_data(ltr390))
+        dprint("got ltr390 data")
         asyncio.create_task(client.publish(state_topic.encode(), json.dumps(data).encode(), qos=1))  # do not block
 
 
@@ -314,20 +328,20 @@ def get_wifi_data(client: MQTTClient):
     return attr_data
 
 
-def get_ltr390_data(ltr390: LTR390):
+async def get_ltr390_data(ltr390: LTR390):
     re, rate = ltr390.get_resolution_rate()
     if re == LTR390.RESOLUTION_13BIT_TIME12_5MS:
-        re = 13
+        re = "13"
     elif re == LTR390.RESOLUTION_16BIT_TIME25MS:
-        re = 16
+        re = "16"
     elif re == LTR390.RESOLUTION_17BIT_TIME50MS:
-        re = 17
+        re = "17"
     elif re == LTR390.RESOLUTION_18BIT_TIME100MS:
-        re = 18
+        re = "18"
     elif re == LTR390.RESOLUTION_19BIT_TIME200MS:
-        re = 19
+        re = "19"
     elif re == LTR390.RESOLUTION_20BIT_TIME400MS:
-        re = 20
+        re = "20"
 
     if rate == LTR390.RATE_25MS:
         rate = "25ms"
@@ -343,11 +357,23 @@ def get_ltr390_data(ltr390: LTR390):
         rate = "1000ms"
     elif rate == LTR390.RATE_2000MS:
         rate = "2000ms"
+    gain = ltr390.get_gain()
+    if gain == LTR390.GAIN_1:
+        gain = "1"
+    elif gain == LTR390.GAIN_3:
+        gain = "3"
+    elif gain == LTR390.GAIN_6:
+        gain = "6"
+    elif gain == LTR390.GAIN_9:
+        gain = "9"
+    elif gain == LTR390.GAIN_18:
+        gain = "18"
     attr_data = {
-        "light": ltr390.read_als(),
-        "uv": ltr390.read_uvs(),
+        "light": await ltr390.read_als(),
+        "uv": await ltr390.read_uvs(),
         "uvs_resolution": re,
         "uvs_rate": rate,
+        "uvs_gain": gain,
         "Wfac": ltr390.wfac,
     }
     return attr_data
@@ -389,55 +415,74 @@ async def listen_mqtt(client: MQTTClient, ltr390: LTR390):
     }
     async for topic, msg, retained, properties in client.queue:
         if topic == command_topic.encode():
-            print(f"Received command: {msg.decode()}")
+            dprint(f"Received command: {msg.decode()}")
             payload = json.loads(msg.decode())
             if "uvs_resolution" in payload:
-                print("change uvs_resolution")
-                uvs_resolution: int = payload["uvs_resolution"]
+                dprint("change uvs_resolution")
+                uvs_resolution: int = int(payload["uvs_resolution"])
                 _, rate = ltr390.get_resolution_rate()
                 ltr390.set_resolution_rate(resolution_map[uvs_resolution], rate)
             if "uvs_rate" in payload:
-                print("change uvs_rate")
+                dprint("change uvs_rate")
                 uvs_rate: str = payload["uvs_rate"]
                 resolution, _ = ltr390.get_resolution_rate()
                 ltr390.set_resolution_rate(resolution, rate_map[uvs_rate])
             if "Wfac" in payload:
-                print("change Wfac")
+                dprint("change Wfac")
                 Wfac: float = payload["Wfac"]
                 ltr390.wfac = Wfac
+            if "uvs_gain" in payload:
+                dprint("change uvs_gain")
+                uvs_gain: int = int(payload["uvs_gain"])
+                if uvs_gain == 1:
+                    uvs_gain = LTR390.GAIN_1
+                elif uvs_gain == 3:
+                    uvs_gain = LTR390.GAIN_3
+                elif uvs_gain == 6:
+                    uvs_gain = LTR390.GAIN_6
+                elif uvs_gain == 9:
+                    uvs_gain = LTR390.GAIN_9
+                elif uvs_gain == 18:
+                    uvs_gain = LTR390.GAIN_18
+                ltr390.set_gain(uvs_gain)
 
 
 async def main(client: MQTTClient):
     try:
-        print("in main")
+        p23 = machine.Pin(23, machine.Pin.OUT)  # TSX0108E使能，高电平启动，但是要等开完机才能高电平，否则会死锁
+        p23.value(0)
+        await asyncio.sleep(2)
+        p23.value(1)
+        dprint("pullup oe")
         await client.connect()
-        print("Connected to wifi.")
+        dprint("Connected to wifi.")
         await client.up.wait()
         client.up.clear()
-        print("client ready")
+        dprint("client ready")
         await client.subscribe(command_topic.encode(), qos=1)
 
         await client.publish(discovery_topic.encode(), json.dumps(discovery_payload).encode(), retain=True, qos=1)
         await client.publish(availability_topic.encode(), b"online", retain=True, qos=1)
-        print("online info published")
+        dprint("online info published")
         try:
-            airmod = AirMod(2, 17, 16)
+            airmod = AirMod(1, 17, 16)
         except Exception as e:
-            print(f"create uart fail: {e}")
+            dprint(f"create uart fail: {e}")
             return
-        print("Connected to airmod uart")
+        dprint("Connected to airmod uart")
         try:
-            ltr390 = LTR390(1, 18, 19)
+            ltr390 = LTR390(1, 18, 19, LTR390.GAIN_18, debug)
+            ltr390.set_thresh(5, 20)
         except Exception as e:
-            print(f"create ltr390 iic fail: {e}")
+            dprint(f"create ltr390 iic fail: {e}")
             return
-        print("Connected to ltr390 iic uv sensor")
+        dprint("Connected to ltr390 iic uv sensor")
         # asyncio.create_task(handle_online(client))
         # asyncio.create_task(handle_offline())
         asyncio.create_task(listen_mqtt(client, ltr390))
         await read_sensors(client, airmod, ltr390)
     except OSError as e:
-        print(f"Connection failed: {str(e)}.")
+        dprint(f"Connection failed: {str(e)}.")
         return
 
 

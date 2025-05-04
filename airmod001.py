@@ -10,7 +10,7 @@ from machine import UART
 class AirMod:
     def __init__(self, id_: int, tx: int, rx: int):
         try:
-            self._uart = UART(id_, baudrate=9600, bits=8, stop=1, tx=tx, rx=rx, rxbuf=100, timeout=0)
+            self._uart = UART(id_, baudrate=9600, bits=8, stop=1, tx=tx, rx=rx, timeout=0)
             # self._writer = asyncio.StreamWriter(self._uart, {}) # type: ignore
         except:
             print("UART error")

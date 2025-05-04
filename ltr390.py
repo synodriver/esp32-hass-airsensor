@@ -17,6 +17,7 @@ class LTR390:
     REG_INT_CFG = const(0x19)
     REG_INT_PST = const(0x1aA)
     PART_ID = const(0x06)
+    MAIN_STATUS = const(0x07)
 
     # 测量模式
     MODE_ALS = const(0x02)  # ALS in Active Mode
@@ -43,7 +44,7 @@ class LTR390:
     GAIN_9 = const(0x3)
     GAIN_18 = const(0x4)
 
-    def __init__(self, i2c_bus, sda_pin=21, scl_pin=22):
+    def __init__(self, i2c_bus, sda_pin=21, scl_pin=22, gain=0x1, debug=False):
         """
         初始化传感器
         :param i2c_bus: I2C总线号 (0或1)
@@ -55,6 +56,8 @@ class LTR390:
         self._verify_device()
         self._init_sensor()
         self.wfac = 1.0  # 光照强度转换系数
+        self.set_gain(gain)
+        self._debug = debug
 
     def _verify_device(self):
         """验证设备ID"""
@@ -72,6 +75,10 @@ class LTR390:
         # 配置测量速率和分辨率
         # 默认设置：500ms间隔，20位分辨率
         self.set_resolution_rate(self.RESOLUTION_20BIT_TIME400MS, self.RATE_500MS)
+
+    def status(self):
+        status = self._read_reg(self.MAIN_STATUS, 1)
+        return status[0]
 
     def get_resolution_rate(self):
         """
@@ -132,9 +139,9 @@ class LTR390:
         self._write_reg(self.REG_UVS_GAIN, gain)
 
     def get_gain(self):
-        return self._read_reg(self.REG_UVS_GAIN, 1)
+        return self._read_reg(self.REG_UVS_GAIN, 1)[0]
 
-    def _read_reg(self, reg, length):
+    def _read_reg(self, reg, length) -> bytes:
         """读取寄存器"""
         return self.i2c.readfrom_mem(self.addr, reg, length)
 
@@ -142,19 +149,27 @@ class LTR390:
         """写入寄存器"""
         self.i2c.writeto_mem(self.addr, reg, bytes([value]))
 
-    def _read_data_reg(self):
+    async def _read_data_reg(self):
         """读取当前模式的数据寄存器"""
+        while True:
+            status = self.status()
+            if status & 0x08:  # new data comming
+                break
+            else:
+                await asyncio.sleep_ms(10)
         if self.mode == self.MODE_UVS:
             data = self._read_reg(self.REG_UVS_DATA, 3)
         else:
             data = self._read_reg(self.REG_ALS_DATA, 3)
         return int.from_bytes(data, 'little')
 
-    def read_uvs(self):
+    async def read_uvs(self):
         """读取紫外线数据（需要先设置为UVS模式）"""
         self._write_reg(self.REG_INT_CFG, 0x34)
         self.set_mode(self.MODE_UVS)
-        raw = self._read_data_reg()
+        raw = await self._read_data_reg()
+        if self._debug:
+            print("raw uvs:%d, main status:%d" % (raw, self.status()))
         gain = self.get_gain()
         if gain == self.GAIN_1:
             gain = 1
@@ -178,13 +193,15 @@ class LTR390:
         elif re == self.RESOLUTION_20BIT_TIME400MS:
             re = 4
         sensitivity = 2300 * gain / 18 * re / 4
-        return raw / sensitivity * self.wfac # https://esphome.io/components/sensor/ltr390
+        return raw / sensitivity * self.wfac  # https://esphome.io/components/sensor/ltr390
 
-    def read_als(self):
+    async def read_als(self):
         """读取环境光数据（需要先设置为ALS模式）"""
         self._write_reg(self.REG_INT_CFG, 0x14)
         self.set_mode(self.MODE_ALS)
-        raw = self._read_data_reg()
+        raw = await self._read_data_reg()
+        if self._debug:
+            print("raw als:%d, main status:%d" % (raw, self.status()))
         gain = self.get_gain()
         if gain == self.GAIN_1:
             gain = 1
@@ -209,12 +226,6 @@ class LTR390:
             re = 4
         return 0.6 * raw / gain / re * self.wfac  # https://esphome.io/components/sensor/ltr390
 
-    # @property
-    # def data_ready(self):
-    #     """检查数据是否就绪"""
-    #     status = self._read_reg(self.REG_INT_PST, 1)[0]
-    #     return (status & 0x08) != 0  # 检查DATA_READY位
-
     def set_thresh(self, low, high):  # LTR390_THRESH_UP and LTR390_THRESH_LOW
         self._write_reg(0x21, high & 0xff)
         self._write_reg(0x22, (high >> 8) & 0xff)
@@ -227,14 +238,15 @@ class LTR390:
 # 使用示例
 
 if __name__ == '__main__':
-    sensor = LTR390(0)  # 使用I2C总线0
-    # 读取紫外线数据
-    sensor.set_mode(sensor.MODE_UVS)
-    while not sensor.data_ready:
-        time.sleep(0.1)
-    print(f"UV Index: {sensor.read_uvs():.2f}")
-    # 读取环境光数据
-    sensor.set_mode(sensor.MODE_ALS)
-    while not sensor.data_ready:
-        time.sleep(0.1)
-    print(f"ALS: {sensor.read_als():.2f} lux")
+    async def main():
+        sensor = LTR390(0)  # 使用I2C总线0
+        # 读取紫外线数据
+        # sensor.set_mode(sensor.MODE_UVS)
+        # while not sensor.data_ready:
+        #     time.sleep(0.1)
+        print(f"UV Index: {await sensor.read_uvs():.2f}")
+        # 读取环境光数据
+        # sensor.set_mode(sensor.MODE_ALS)
+        # while not sensor.data_ready:
+        #     time.sleep(0.1)
+        print(f"ALS: {await sensor.read_als():.2f} lux")
