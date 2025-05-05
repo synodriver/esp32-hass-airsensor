@@ -15,7 +15,7 @@ def calcchecksum(data: bytes) -> int:
 
 class Dart:
     def __init__(self, id_: int, tx: int, rx: int):
-        self._uart = UART(id_, baudrate=9600, bits=8, stop=1, tx=tx, rx=rx, rxbuf=100, timeout=0)
+        self._uart = UART(id_, baudrate=9600, bits=8, stop=1, tx=tx, rx=rx, timeout=0)
         self._writer = asyncio.StreamWriter(self._uart, {}) # type: ignore
         self._reader = asyncio.StreamReader(self._uart) # type: ignore
         self.has_data = asyncio.Event()
