@@ -48,6 +48,11 @@ class Dart:
                 self.data_mg = ch2o_mg
                 self.has_data.set()
 
+    async def request(self):
+        self._writer.write(b'\xff\x01\x86\x00\x00\x00\x00\x00y')
+        await self._writer.drain()
+        # await self.has_data.wait()
+
     async def ask_mode(self):
         """
         询问模式
@@ -55,6 +60,7 @@ class Dart:
         """
         self._writer.write(b'\xff\x01xA\x00\x00\x00\x00F')
         await self._writer.drain()
+        self.mode = 1
 
     async def auto_mode(self):
         """
@@ -63,6 +69,7 @@ class Dart:
         """
         self._writer.write(b'\xff\x01x@\x00\x00\x00\x00G')
         await self._writer.drain()
+        self.mode = 0
 
     def deinit(self):
         self._should_stop = True

@@ -107,11 +107,11 @@ command_topic = "%s/%s/%s/set" % (discovery_prefix, component, object_id)
 discovery_payload = {
     "device": {
         "identifiers": object_id,
-        "name": "synosensor",
+        "name": "九合一传感器模组",
         "manufacturer": "Synodriver Corp",
         "model": "synosensor 01",
         "sw_version": "0.1",
-        "serial_number": "1145141919810",
+        "serial_number": object_id,
         "hw_version": "0.1"
     },
     "origin": {
@@ -416,7 +416,11 @@ async def listen_mqtt(client: MQTTClient, ltr390: LTR390):
     async for topic, msg, retained, properties in client.queue:
         if topic == command_topic.encode():
             dprint(f"Received command: {msg.decode()}")
-            payload = json.loads(msg.decode())
+            try:
+                payload = json.loads(msg.decode())
+            except:
+                dprint("Invalid JSON payload received in command topic")
+                continue
             if "uvs_resolution" in payload:
                 dprint("change uvs_resolution")
                 uvs_resolution: int = int(payload["uvs_resolution"])
