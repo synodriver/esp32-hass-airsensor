@@ -63,9 +63,11 @@ def save_config(config):
 netconfig = load_config()
 debug = netconfig["debug"]
 
+
 def dprint(*args, **kwargs):
     if debug:
         print(*args, **kwargs)
+
 
 BROKER_IP = netconfig["broker_ip"]
 BROKER_PORT = netconfig["broker_port"]
@@ -263,6 +265,17 @@ discovery_payload = {
             "options": ["1", "3", "6", "9", "18"],
             "command_template": "{\"uvs_gain\":  \"{{value}}\"}",
         },
+        "%s.uvs_sensitivity_max" % object_id: {
+            "platform": "number",
+            "icon": "mdi:numeric",
+            "name": "紫外线传感器sensitivity_max",
+            "value_template": "{{value_json.uvs_sensitivity_max}}",
+            "unique_id": "%s.uvs_sensitivity_max" % object_id,
+            "min": 0,
+            "max": 10000,
+            "step": 1,
+            "command_template": "{\"uvs_sensitivity_max\":  {{value}}}",
+        },
         "%s.Wfac" % object_id: {
             "platform": "number",
             "icon": "mdi:numeric",
@@ -374,6 +387,7 @@ async def get_ltr390_data(ltr390: LTR390):
         "uvs_resolution": re,
         "uvs_rate": rate,
         "uvs_gain": gain,
+        "uvs_sensitivity_max": ltr390.sensitivity_max,
         "Wfac": ltr390.wfac,
     }
     return attr_data
@@ -449,6 +463,10 @@ async def listen_mqtt(client: MQTTClient, ltr390: LTR390):
                 elif uvs_gain == 18:
                     uvs_gain = LTR390.GAIN_18
                 ltr390.set_gain(uvs_gain)
+            if "uvs_sensitivity_max" in payload:
+                dprint("change uvs_sensitivity_max")
+                uvs_sensitivity_max = payload["uvs_sensitivity_max"]
+                ltr390.sensitivity_max = uvs_sensitivity_max
 
 
 async def main(client: MQTTClient):
@@ -475,13 +493,14 @@ async def main(client: MQTTClient):
             return
         dprint("Connected to airmod uart")
         try:
-            ltr390 = LTR390(1, 18, 19, LTR390.GAIN_18, debug)
+            i2c = machine.I2C(1, sda=machine.Pin(18), scl=machine.Pin(19), freq=400000)
+            ltr390 = LTR390(i2c, LTR390.GAIN_18, 1400, debug)
             ltr390.set_thresh(5, 20)
         except Exception as e:
             dprint(f"create ltr390 iic fail: {e}")
             return
         dprint("Connected to ltr390 iic uv sensor")
-        # asyncio.create_task(handle_online(client))
+        asyncio.create_task(handle_online(client))
         # asyncio.create_task(handle_offline())
         asyncio.create_task(listen_mqtt(client, ltr390))
         await read_sensors(client, airmod, ltr390)

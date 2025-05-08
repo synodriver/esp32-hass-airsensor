@@ -44,18 +44,17 @@ class LTR390:
     GAIN_9 = const(0x3)
     GAIN_18 = const(0x4)
 
-    def __init__(self, i2c_bus, sda_pin=21, scl_pin=22, gain=0x1, debug=False):
+    def __init__(self, i2c: I2C, gain=0x1, sensitivity_max=1400, debug=False):
         """
         初始化传感器
-        :param i2c_bus: I2C总线号 (0或1)
-        :param sda_pin: SDA引脚
-        :param scl_pin: SCL引脚
+        :param i2c: I2C对象
         """
-        self.i2c = I2C(i2c_bus, sda=Pin(sda_pin), scl=Pin(scl_pin), freq=400000)
+        self.i2c = i2c
         self.addr = self.I2C_ADDR
         self._verify_device()
         self._init_sensor()
         self.wfac = 1.0  # 光照强度转换系数
+        self.sensitivity_max = sensitivity_max
         self.set_gain(gain)
         self._debug = debug
 
@@ -192,7 +191,7 @@ class LTR390:
             re = 2
         elif re == self.RESOLUTION_20BIT_TIME400MS:
             re = 4
-        sensitivity = 2300 * gain / 18 * re / 4
+        sensitivity = self.sensitivity_max * gain / 18 * re / 4
         return raw / sensitivity * self.wfac  # https://esphome.io/components/sensor/ltr390
 
     async def read_als(self):

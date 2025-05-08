@@ -52,7 +52,7 @@ class HCSR04:
         self.trigger.value(0)
         try:
             pulse_time = time_pulse_us(self.echo, 1, self.echo_timeout_us)
-            print(f"pulse_time: {pulse_time}")
+            # print(f"pulse_time: {pulse_time}")
             return pulse_time
         except OSError as ex:
             if ex.args[0] == 110: # 110 = ETIMEDOUT
@@ -69,3 +69,17 @@ class HCSR04:
         pulse_time = self._send_pulse_and_wait()
         cms = (pulse_time / 2) / 29.1
         return cms
+
+if __name__ == "__main__":
+    from machine import PWM
+    h = HCSR04(19, 18)
+    full = 2**16
+    p = PWM(17, 10000)
+p.duty(0)
+while True:
+    dis = h.distance_mm()
+    if dis > 512:
+        p.duty(0)
+    else:
+        p.duty(min(1023- dis*2, 1023))
+    time.sleep_ms(100)
