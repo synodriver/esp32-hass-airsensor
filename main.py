@@ -317,20 +317,54 @@ client = MQTTClient(config)
 # def on_message(topic, msg, retained, properties=None):
 #     print((topic, msg, retained, properties))
 
+lock = asyncio.Lock()
+sensor_state = {}  # global sensor state
+async def update_sensor_state(value: dict):
+    global sensor_state
+    async with lock:
+        sensor_state.update(value)
+        # print(f"Sensor {sensor} updated to {value}")
 
-async def read_sensors(client: MQTTClient, airmod: AirMod, ltr390: LTR390):
+async def read_airdmod(airmod: AirMod):
     while True:
         await airmod.has_data.wait()
         airmod.has_data.clear()
         data = airmod.data
         dprint("got airmod data")
-        data.update(get_wifi_data(client))
-        data.update(await get_ltr390_data(ltr390))
+        await update_sensor_state(data)
+
+async def read_ltr390(ltr390: LTR390):
+    while True:
+        data = await get_ltr390_data(ltr390)
         dprint("got ltr390 data")
-        asyncio.create_task(client.publish(state_topic.encode(), json.dumps(data).encode(), qos=1))  # do not block
+        await update_sensor_state(data)
+        await asyncio.sleep_ms(200)  # Avoid busy waiting
 
+async def read_wifi(client: MQTTClient):
+    while True:
+        data = get_wifi_data(client)
+        dprint("got wifi data")
+        await update_sensor_state(data)
+        await asyncio.sleep(30)
 
-def get_wifi_data(client: MQTTClient):
+async def publish_data(client: MQTTClient):
+    await asyncio.sleep(5)  # Wait for the first data in sensor state
+    while True:
+        await client.publish(state_topic.encode(), json.dumps(sensor_state).encode(), qos=1)  # do not block
+        await asyncio.sleep(1)
+
+# async def read_sensors(client: MQTTClient, airmod: AirMod, ltr390: LTR390):
+#     while True:
+#         await airmod.has_data.wait()
+#         airmod.has_data.clear()
+#         data = airmod.data
+#         dprint("got airmod data")
+#         data.update(get_wifi_data(client))
+#         data.update(await get_ltr390_data(ltr390))
+#         dprint("got ltr390 data")
+#         asyncio.create_task(client.publish(state_topic.encode(), json.dumps(data).encode(), qos=1))  # do not block
+
+def get_wifi_data(client: MQTTClient) -> dict:
     attr_data = {"ip_address": client._sta_if.ifconfig()[0],
                  "ssid": client._sta_if.config('ssid'),
                  "essid": client._sta_if.config('essid'),
@@ -341,7 +375,7 @@ def get_wifi_data(client: MQTTClient):
     return attr_data
 
 
-async def get_ltr390_data(ltr390: LTR390):
+async def get_ltr390_data(ltr390: LTR390) -> dict:
     re, rate = ltr390.get_resolution_rate()
     if re == LTR390.RESOLUTION_13BIT_TIME12_5MS:
         re = "13"
@@ -500,10 +534,15 @@ async def main(client: MQTTClient):
             dprint(f"create ltr390 iic fail: {e}")
             return
         dprint("Connected to ltr390 iic uv sensor")
-        asyncio.create_task(handle_online(client))
+        t1 = asyncio.create_task(handle_online(client))
         # asyncio.create_task(handle_offline())
-        asyncio.create_task(listen_mqtt(client, ltr390))
-        await read_sensors(client, airmod, ltr390)
+        t2 = asyncio.create_task(listen_mqtt(client, ltr390))
+        t3 = asyncio.create_task(read_airdmod(airmod))
+        t4 = asyncio.create_task(read_ltr390(ltr390))
+        t5 = asyncio.create_task(read_wifi(client))
+        t6 = asyncio.create_task(publish_data(client))
+        await asyncio.gather(t1, t2, t3, t4, t5, t6)
+        # await read_sensors(client, airmod, ltr390)
     except OSError as e:
         dprint(f"Connection failed: {str(e)}.")
         return
