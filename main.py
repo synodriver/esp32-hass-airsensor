@@ -3,8 +3,15 @@
 Copyright (c) 2008-2025 synodriver <diguohuangjiajinweijun@gmail.com>
 """
 import binascii
+import os
+
+import esp
+import esp32
+import gc
 
 from ltr390 import LTR390
+from bmp3xx import BMP3XX_I2C
+from airmod001 import AirMod
 
 try:
     import uasyncio as asyncio
@@ -16,8 +23,6 @@ import network
 import machine
 from mqtt_as import MQTTClient, config
 from ubinascii import hexlify
-
-from airmod001 import AirMod
 
 # 默认配置
 DEFAULT_CONFIG = {
@@ -109,7 +114,7 @@ command_topic = "%s/%s/%s/set" % (discovery_prefix, component, object_id)
 discovery_payload = {
     "device": {
         "identifiers": object_id,
-        "name": "九合一传感器模组",
+        "name": "十合一传感器模组",
         "manufacturer": "Synodriver Corp",
         "model": "synosensor 01",
         "sw_version": "0.1",
@@ -186,6 +191,22 @@ discovery_payload = {
             "value_template": "{{value_json.uv}}",
             "unique_id": "%s.uv" % object_id
         },
+        "%s.pressure" % object_id: {
+            "platform": "sensor",
+            "device_class": "pressure",
+            "unit_of_measurement": "kPa",
+            "value_template": "{{value_json.pressure}}",
+            "unique_id": "%s.pressure" % object_id
+        },
+        "%s.pressure_temperature" % object_id: {
+            "platform": "sensor",
+            "name": "气压传感器内部温度",
+            "enabled_by_default": False,
+            "device_class": "temperature",
+            "unit_of_measurement": "°C",
+            "value_template": "{{value_json.pressure_temperature}}",
+            "unique_id": "%s.pressure_temperature" % object_id
+        },
 
         "%s.ip_address" % object_id: {
             "platform": "sensor",
@@ -234,6 +255,46 @@ discovery_payload = {
             "value_template": "{{value_json.txpower}}",
             "unique_id": "%s.txpower" % object_id,
             "unit_of_measurement": "dBm",
+            "entity_category": "diagnostic"
+        },
+        "%s.flash_size" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:file",
+            "name": "flash总大小",
+            "device_class": "data_size",
+            "value_template": "{{value_json.flash_size}}",
+            "unique_id": "%s.flash_size" % object_id,
+            "unit_of_measurement": "B",
+            "entity_category": "diagnostic"
+        },
+        "%s.raw_temperature" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:cpu-32-bit",
+            "name": "核心温度",
+            "device_class": "temperature",
+            "unit_of_measurement": "°C",
+            "value_template": "{{value_json.raw_temperature}}",
+            "unique_id": "%s.raw_temperature" % object_id,
+            "entity_category": "diagnostic"
+        },
+        "%s.flash_available" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:file-alert",
+            "name": "flash剩余空间",
+            "device_class": "data_size",
+            "value_template": "{{value_json.flash_available}}",
+            "unique_id": "%s.flash_available" % object_id,
+            "unit_of_measurement": "B",
+            "entity_category": "diagnostic"
+        },
+        "%s.free_memory" % object_id: {
+            "platform": "sensor",
+            "icon": "mdi:memory",
+            "name": "剩余内存",
+            "device_class": "data_size",
+            "value_template": "{{value_json.free_memory}}",
+            "unique_id": "%s.free_memory" % object_id,
+            "unit_of_measurement": "B",
             "entity_category": "diagnostic"
         },
 
@@ -286,7 +347,18 @@ discovery_payload = {
             "max": 10,
             "step": 0.01,
             "command_template": "{\"Wfac\":  {{value}}}",
-        }
+        },
+        "%s.altitude" % object_id: {
+            "platform": "number",
+            "icon": "mdi:terrain",
+            "name": "参考海拔高度",
+            "value_template": "{{value_json.altitude}}",
+            "unique_id": "%s.altitude" % object_id,
+            "min": -1000000,
+            "max": 1000000,
+            "step": 0.1,
+            "command_template": "{\"altitude\":  {{value}}}",
+        },
     },
     "state_topic": state_topic,
     "availability_topic": availability_topic,
@@ -312,18 +384,20 @@ dprint(config)
 # The rest of the configuration
 client = MQTTClient(config)
 
-
 # For MQTT 5 and 3.1.1 support
 # def on_message(topic, msg, retained, properties=None):
 #     print((topic, msg, retained, properties))
 
 lock = asyncio.Lock()
 sensor_state = {}  # global sensor state
+
+
 async def update_sensor_state(value: dict):
     global sensor_state
     async with lock:
         sensor_state.update(value)
         # print(f"Sensor {sensor} updated to {value}")
+
 
 async def read_airdmod(airmod: AirMod):
     while True:
@@ -333,12 +407,26 @@ async def read_airdmod(airmod: AirMod):
         dprint("got airmod data")
         await update_sensor_state(data)
 
+
 async def read_ltr390(ltr390: LTR390):
     while True:
         data = await get_ltr390_data(ltr390)
         dprint("got ltr390 data")
         await update_sensor_state(data)
         await asyncio.sleep_ms(200)  # Avoid busy waiting
+
+
+async def read_bmp390(bmp390: BMP3XX_I2C):
+    while True:
+        data = {
+            "pressure": bmp390.pressure / 1000,
+            "pressure_temperature": bmp390.temperature,
+            "altitude": bmp390.altitude
+        }
+        dprint("got bmp390 data")
+        await update_sensor_state(data)
+        await asyncio.sleep(1)  # Avoid busy waiting
+
 
 async def read_wifi(client: MQTTClient):
     while True:
@@ -347,11 +435,29 @@ async def read_wifi(client: MQTTClient):
         await update_sensor_state(data)
         await asyncio.sleep(30)
 
+
+async def read_esp_info():
+    while True:
+        flash_size = esp.flash_size()  # byte
+        raw_temperature = (esp32.raw_temperature() - 32) / 1.8
+        size_info = os.statvfs('/flash')
+        flash_available = size_info[0] * size_info[3]
+        free = gc.mem_free()
+        await update_sensor_state({
+            "flash_size": flash_size,
+            "raw_temperature": raw_temperature,
+            "flash_available": flash_available,
+            "free_memory": free,
+        })
+        await asyncio.sleep(60)
+
+
 async def publish_data(client: MQTTClient):
     await asyncio.sleep(5)  # Wait for the first data in sensor state
     while True:
         await client.publish(state_topic.encode(), json.dumps(sensor_state).encode(), qos=1)  # do not block
         await asyncio.sleep(1)
+
 
 # async def read_sensors(client: MQTTClient, airmod: AirMod, ltr390: LTR390):
 #     while True:
@@ -443,7 +549,7 @@ async def handle_offline():
         # await setup_ap(True)
 
 
-async def listen_mqtt(client: MQTTClient, ltr390: LTR390):
+async def listen_mqtt(client: MQTTClient, ltr390: LTR390, bmp390: BMP3XX_I2C):
     resolution_map = {
         20: LTR390.RESOLUTION_20BIT_TIME400MS,
         19: LTR390.RESOLUTION_19BIT_TIME200MS,
@@ -501,6 +607,17 @@ async def listen_mqtt(client: MQTTClient, ltr390: LTR390):
                 dprint("change uvs_sensitivity_max")
                 uvs_sensitivity_max = payload["uvs_sensitivity_max"]
                 ltr390.sensitivity_max = uvs_sensitivity_max
+            if "altitude" in payload:  # 气压传感器设置当前海拔
+                dprint("change altitude")
+                altitude: float = payload["altitude"]
+                while not bmp390.begin():
+                    dprint('Please check that the device is properly connected')
+                    await asyncio.sleep(3)
+                while not bmp390.set_common_sampling_mode(BMP3XX_I2C.ULTRA_PRECISION):
+                    dprint('Set samping mode fail, retrying...')
+                    await asyncio.sleep(3)
+                if bmp390.calibrated_absolute_difference(altitude):
+                    dprint("Absolute difference base value set successfully!")
 
 
 async def main(client: MQTTClient):
@@ -534,14 +651,30 @@ async def main(client: MQTTClient):
             dprint(f"create ltr390 iic fail: {e}")
             return
         dprint("Connected to ltr390 iic uv sensor")
+        try:
+            i2c2 = machine.I2C(0, sda=machine.Pin(4), scl=machine.Pin(5), freq=40000)
+            bmp390 = BMP3XX_I2C(i2c2, 0x77, debug)
+            while not bmp390.begin():
+                dprint('Please check that the device is properly connected')
+                await asyncio.sleep(3)
+            while not bmp390.set_common_sampling_mode(BMP3XX_I2C.ULTRA_PRECISION):
+                dprint('Set samping mode fail, retrying...')
+                await asyncio.sleep(3)
+            if bmp390.calibrated_absolute_difference(280.0):
+                dprint("Absolute difference base value set successfully!")
+        except Exception as e:
+            dprint(f"create bmp390 iic fail: {e}")
+            return
         t1 = asyncio.create_task(handle_online(client))
         # asyncio.create_task(handle_offline())
-        t2 = asyncio.create_task(listen_mqtt(client, ltr390))
+        t2 = asyncio.create_task(listen_mqtt(client, ltr390, bmp390))
         t3 = asyncio.create_task(read_airdmod(airmod))
         t4 = asyncio.create_task(read_ltr390(ltr390))
         t5 = asyncio.create_task(read_wifi(client))
-        t6 = asyncio.create_task(publish_data(client))
-        await asyncio.gather(t1, t2, t3, t4, t5, t6)
+        t6 = asyncio.create_task(read_bmp390(bmp390))
+        t7 = asyncio.create_task(read_esp_info())
+        t8 = asyncio.create_task(publish_data(client))
+        await asyncio.gather(t1, t2, t3, t4, t5, t6, t7, t8)
         # await read_sensors(client, airmod, ltr390)
     except OSError as e:
         dprint(f"Connection failed: {str(e)}.")
