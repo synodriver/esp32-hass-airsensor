@@ -2,27 +2,27 @@
 """
 Copyright (c) 2008-2025 synodriver <diguohuangjiajinweijun@gmail.com>
 """
+import gc
 import binascii
+import hashlib
 import os
+gc.collect()
 
+# import aiohttp
 import esp
 import esp32
-import gc
+gc.collect()
+
 
 from ltr390 import LTR390
 from bmp3xx import BMP3XX_I2C
 from airmod001 import AirMod
 
-try:
-    import uasyncio as asyncio
-except ImportError:
-    import asyncio
-
-import ujson as json
-import network
+import asyncio
+import json
 import machine
 from mqtt_as import MQTTClient, config
-from ubinascii import hexlify
+gc.collect()
 
 # 默认配置
 DEFAULT_CONFIG = {
@@ -81,13 +81,13 @@ BROKER_PASSWORD = netconfig["broker_password"]
 
 discovery_prefix = "homeassistant"
 component = "device"
-object_id = hexlify(machine.unique_id()).decode()
+object_id = binascii.hexlify(machine.unique_id()).decode()
 
 discovery_topic = "%s/%s/%s/config" % (discovery_prefix, component, object_id)
 availability_topic = "%s/%s/%s/availability" % (discovery_prefix, component, object_id)
 state_topic = "%s/%s/%s/state" % (discovery_prefix, component, object_id)
 command_topic = "%s/%s/%s/set" % (discovery_prefix, component, object_id)
-
+log_topic = "%s/%s/%s/log" % (discovery_prefix, component, object_id) # log topic for debug
 # ap = network.WLAN(network.AP_IF)  # fail back
 
 # async def setup_ap(activate=True):
@@ -359,6 +359,14 @@ discovery_payload = {
             "step": 0.1,
             "command_template": "{\"altitude\":  {{value}}}",
         },
+        "%s.reset" % object_id: {
+            "platform": "button",
+            "name": "重启",
+            "icon": "mdi:restart",
+            "unique_id": "%s.reset" % object_id,
+            "entity_category": "diagnostic",
+            "command_template": "{\"reset\": \"{{value}}\"}",
+        }
     },
     "state_topic": state_topic,
     "availability_topic": availability_topic,
@@ -618,6 +626,45 @@ async def listen_mqtt(client: MQTTClient, ltr390: LTR390, bmp390: BMP3XX_I2C):
                     await asyncio.sleep(3)
                 if bmp390.calibrated_absolute_difference(altitude):
                     dprint("Absolute difference base value set successfully!")
+            if "reset" in payload:
+                dprint("reset")
+                machine.reset()
+            if "verify" in payload:  # {"file": filename, "verify": true}
+                dprint("verify")
+                md5 = hashlib.md5()
+                with open(payload["file"], "rb") as f:
+                    while data := f.read(100):
+                        md5.update(data)
+                ret = binascii.hexlify(md5.digest())
+                await client.publish(log_topic.encode(), ret)
+                continue
+            if "file" in payload: # {"file": filename, "content": "base64 content or text", "bin": False, "url": "http://xxx"}
+                dprint("update")
+                filename = payload["file"]
+                content = payload.get("content", None)
+                bin_ = payload.get("bin", False)
+                url = payload.get("url", None)
+                if not content and not url:
+                    os.remove(filename)
+                    continue
+                if url:
+                    try:
+                        import aiohttp
+                        with open(filename, "wb") as f:
+                            async with aiohttp.ClientSession() as session:
+                                async with session.get(url) as response:
+                                    while chunk := await response.read(100):  # type: ignore
+                                        f.write(chunk)
+                    except Exception as e:  # 可能内存不够
+                        await client.publish(log_topic.encode(), str(e).encode())
+                    continue
+                if bin_:
+                    with open(filename, "wb") as f:
+                        f.write(binascii.a2b_base64(content))
+                else:
+                    with open(filename, "w") as f:
+                        f.write(content)
+                dprint("update done")
 
 
 async def main(client: MQTTClient):
@@ -641,16 +688,20 @@ async def main(client: MQTTClient):
             airmod = AirMod(1, 17, 16)
         except Exception as e:
             dprint(f"create uart fail: {e}")
+            await client.publish(log_topic.encode(), f"create uart fail: {e}".encode())
             return
         dprint("Connected to airmod uart")
+        await client.publish(log_topic.encode(), b"Connected to airmod uart")
         try:
             i2c = machine.I2C(1, sda=machine.Pin(18), scl=machine.Pin(19), freq=400000)
             ltr390 = LTR390(i2c, LTR390.GAIN_18, 1400, debug)
             ltr390.set_thresh(5, 20)
         except Exception as e:
             dprint(f"create ltr390 iic fail: {e}")
+            await client.publish(log_topic.encode(), f"create ltr390 iic fail: {e}".encode())
             return
         dprint("Connected to ltr390 iic uv sensor")
+        await client.publish(log_topic.encode(), b"Connected to ltr390 iic uv sensor")
         try:
             i2c2 = machine.I2C(0, sda=machine.Pin(4), scl=machine.Pin(5), freq=40000)
             bmp390 = BMP3XX_I2C(i2c2, 0x77, debug)
@@ -664,7 +715,10 @@ async def main(client: MQTTClient):
                 dprint("Absolute difference base value set successfully!")
         except Exception as e:
             dprint(f"create bmp390 iic fail: {e}")
+            await client.publish(log_topic.encode(), f"create bmp390 iic fail: {e}".encode())
             return
+        dprint("Connected to bmp390 iic pressure sensor")
+        await client.publish(log_topic.encode(), b"Connected to bmp390 iic pressure sensor")
         t1 = asyncio.create_task(handle_online(client))
         # asyncio.create_task(handle_offline())
         t2 = asyncio.create_task(listen_mqtt(client, ltr390, bmp390))
@@ -685,3 +739,4 @@ try:
     asyncio.run(main(client))
 finally:  # Prevent LmacRxBlk:1 errors.
     client.close()
+

@@ -75,11 +75,11 @@ if __name__ == "__main__":
     h = HCSR04(19, 18)
     full = 2**16
     p = PWM(17, 10000)
-p.duty(0)
-while True:
-    dis = h.distance_mm()
-    if dis > 512:
-        p.duty(0)
-    else:
-        p.duty(min(1023- dis*2, 1023))
-    time.sleep_ms(100)
+    p.duty(0)
+    while True:
+        dis = h.distance_mm()
+        if dis > 512:
+            p.duty(0)
+        else:
+            p.duty(max(min(1023- dis*2, 1023), 0))
+        time.sleep_ms(100)
