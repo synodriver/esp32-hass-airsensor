@@ -548,6 +548,7 @@ async def handle_online(client: MQTTClient):
         client.up.clear()
         # await setup_ap(False)
         await client.publish(availability_topic.encode(), b"online", retain=True, qos=1)
+        await client.subscribe(command_topic.encode(), qos=1)
 
 
 async def handle_offline():
