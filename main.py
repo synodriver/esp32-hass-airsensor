@@ -17,11 +17,6 @@ import esp
 import esp32
 gc.collect()
 
-
-from ltr390 import LTR390
-from bmp3xx import BMP3XX_I2C
-from airmod001 import AirMod
-
 import asyncio
 import json
 import machine
@@ -92,6 +87,8 @@ availability_topic = "%s/%s/%s/availability" % (discovery_prefix, component, obj
 state_topic = "%s/%s/%s/state" % (discovery_prefix, component, object_id)
 command_topic = "%s/%s/%s/set" % (discovery_prefix, component, object_id)
 log_topic = "%s/%s/%s/log" % (discovery_prefix, component, object_id) # log topic for debug
+
+device_name = "template_device"  # 设备名称
 # ap = network.WLAN(network.AP_IF)  # fail back
 
 # async def setup_ap(activate=True):
@@ -118,7 +115,7 @@ log_topic = "%s/%s/%s/log" % (discovery_prefix, component, object_id) # log topi
 discovery_payload = {
     "device": {
         "identifiers": object_id,
-        "name": "十合一传感器模组",
+        "name": device_name,
         "manufacturer": "Synodriver Corp",
         "model": "synosensor 01",
         "sw_version": "0.1",
@@ -126,92 +123,11 @@ discovery_payload = {
         "hw_version": "0.1"
     },
     "origin": {
-        "name": "7in1sensor",
+        "name": device_name,
         "sw_version": "0.1",
         "support_url": "https://github.com/synodriver",
     },
     "components": {
-        "%s.temperature" % object_id: {
-            "platform": "sensor",
-            "device_class": "temperature",
-            "unit_of_measurement": "°C",
-            "value_template": "{{value_json.temperature}}",
-            "unique_id": "%s.temperature" % object_id
-        },
-        "%s.humidity" % object_id: {
-            "platform": "sensor",
-            "device_class": "humidity",
-            "unit_of_measurement": "%",
-            "value_template": "{{value_json.humidity}}",
-            "unique_id": "%s.humidity" % object_id
-        },
-        "%s.tvoc" % object_id: {
-            "platform": "sensor",
-            "device_class": "volatile_organic_compounds",
-            "unit_of_measurement": "µg/m³",
-            "value_template": "{{value_json.voc}}",
-            "unique_id": "%s.tvoc" % object_id
-        },
-        "%s.pm25" % object_id: {
-            "platform": "sensor",
-            "device_class": "pm25",
-            "unit_of_measurement": "µg/m³",
-            "value_template": "{{value_json.pm25}}",
-            "unique_id": "%s.pm25" % object_id
-        },
-        "%s.pm10" % object_id: {
-            "platform": "sensor",
-            "device_class": "pm10",
-            "unit_of_measurement": "µg/m³",
-            "value_template": "{{value_json.pm10}}",
-            "unique_id": "%s.pm10" % object_id
-        },
-        "%s.ch2o" % object_id: {
-            "platform": "sensor",
-            "icon": "mdi:chemical-weapon",
-            "name": "甲醛",
-            "unit_of_measurement": "µg/m³",
-            "value_template": "{{value_json.ch2o}}",
-            "unique_id": "%s.ch2o" % object_id
-        },
-        "%s.co2" % object_id: {
-            "platform": "sensor",
-            "device_class": "carbon_dioxide",
-            "unit_of_measurement": "ppm",
-            "value_template": "{{value_json.co2}}",
-            "unique_id": "%s.co2" % object_id
-        },
-        "%s.light" % object_id: {
-            "platform": "sensor",
-            "device_class": "illuminance",
-            "unit_of_measurement": "lx",
-            "value_template": "{{value_json.light}}",
-            "unique_id": "%s.light" % object_id
-        },
-        "%s.uv" % object_id: {
-            "platform": "sensor",
-            "name": "紫外线指数",
-            "unit_of_measurement": "UV index",
-            "value_template": "{{value_json.uv}}",
-            "unique_id": "%s.uv" % object_id
-        },
-        "%s.pressure" % object_id: {
-            "platform": "sensor",
-            "device_class": "pressure",
-            "unit_of_measurement": "kPa",
-            "value_template": "{{value_json.pressure}}",
-            "unique_id": "%s.pressure" % object_id
-        },
-        "%s.pressure_temperature" % object_id: {
-            "platform": "sensor",
-            "name": "气压传感器内部温度",
-            "enabled_by_default": False,
-            "device_class": "temperature",
-            "unit_of_measurement": "°C",
-            "value_template": "{{value_json.pressure_temperature}}",
-            "unique_id": "%s.pressure_temperature" % object_id
-        },
-
         "%s.ip_address" % object_id: {
             "platform": "sensor",
             "icon": "mdi:ip",
@@ -301,68 +217,6 @@ discovery_payload = {
             "unit_of_measurement": "B",
             "entity_category": "diagnostic"
         },
-
-        "%s.uvs_resolution" % object_id: {
-            "platform": "select",
-            "icon": "mdi:numeric",
-            "name": "紫外线传感器分辨率(位)",
-            "value_template": "{{value_json.uvs_resolution}}",
-            "unique_id": "%s.uvs_resolution" % object_id,
-            "options": ["20", "19", "18", "17", "16", "13"],  # option list must be List[str]
-            # "entity_category": "diagnostic",
-            "command_template": "{\"uvs_resolution\":  \"{{value}}}\"",
-        },
-        "%s.uvs_rate" % object_id: {
-            "platform": "select",
-            "icon": "mdi:numeric",
-            "name": "紫外线传感器测量速率",
-            "value_template": "{{value_json.uvs_rate}}",
-            "unique_id": "%s.uvs_rate" % object_id,
-            "options": ["25ms", "50ms", "100ms", "200ms", "500ms", "1000ms", "2000ms"],
-            "command_template": "{\"uvs_rate\":  \"{{value}}\"}",
-        },
-        "%s.uvs_gain" % object_id: {
-            "platform": "select",
-            "icon": "mdi:numeric",
-            "name": "紫外线传感器增益",
-            "value_template": "{{value_json.uvs_gain}}",
-            "unique_id": "%s.uvs_gain" % object_id,
-            "options": ["1", "3", "6", "9", "18"],
-            "command_template": "{\"uvs_gain\":  \"{{value}}\"}",
-        },
-        "%s.uvs_sensitivity_max" % object_id: {
-            "platform": "number",
-            "icon": "mdi:numeric",
-            "name": "紫外线传感器sensitivity_max",
-            "value_template": "{{value_json.uvs_sensitivity_max}}",
-            "unique_id": "%s.uvs_sensitivity_max" % object_id,
-            "min": 0,
-            "max": 10000,
-            "step": 1,
-            "command_template": "{\"uvs_sensitivity_max\":  {{value}}}",
-        },
-        "%s.Wfac" % object_id: {
-            "platform": "number",
-            "icon": "mdi:numeric",
-            "name": "紫外线传感器Wfac",
-            "value_template": "{{value_json.Wfac}}",
-            "unique_id": "%s.Wfac" % object_id,
-            "min": 1,
-            "max": 10,
-            "step": 0.01,
-            "command_template": "{\"Wfac\":  {{value}}}",
-        },
-        "%s.altitude" % object_id: {
-            "platform": "number",
-            "icon": "mdi:terrain",
-            "name": "参考海拔高度",
-            "value_template": "{{value_json.altitude}}",
-            "unique_id": "%s.altitude" % object_id,
-            "min": -1000000,
-            "max": 1000000,
-            "step": 0.1,
-            "command_template": "{\"altitude\":  {{value}}}",
-        },
         "%s.reset" % object_id: {
             "platform": "button",
             "name": "重启",
@@ -400,45 +254,13 @@ client = MQTTClient(config)
 # def on_message(topic, msg, retained, properties=None):
 #     print((topic, msg, retained, properties))
 
-lock = asyncio.Lock()
 sensor_state = {}  # global sensor state
 
 
 async def update_sensor_state(value: dict):
     global sensor_state
-    async with lock:
-        sensor_state.update(value)
+    sensor_state.update(value)
         # print(f"Sensor {sensor} updated to {value}")
-
-
-async def read_airdmod(airmod: AirMod):
-    while True:
-        await airmod.has_data.wait()
-        airmod.has_data.clear()
-        data = airmod.data
-        dprint("got airmod data")
-        await update_sensor_state(data)
-
-
-async def read_ltr390(ltr390: LTR390):
-    while True:
-        data = await get_ltr390_data(ltr390)
-        dprint("got ltr390 data")
-        await update_sensor_state(data)
-        await asyncio.sleep_ms(200)  # Avoid busy waiting
-
-
-async def read_bmp390(bmp390: BMP3XX_I2C):
-    while True:
-        data = {
-            "pressure": bmp390.pressure / 1000,
-            "pressure_temperature": bmp390.temperature,
-            "altitude": bmp390.altitude
-        }
-        dprint("got bmp390 data")
-        await update_sensor_state(data)
-        await asyncio.sleep(1)  # Avoid busy waiting
-
 
 async def read_wifi(client: MQTTClient):
     while True:
@@ -470,18 +292,6 @@ async def publish_data(client: MQTTClient):
         await client.publish(state_topic.encode(), json.dumps(sensor_state).encode(), qos=1)  # do not block
         await asyncio.sleep(1)
 
-
-# async def read_sensors(client: MQTTClient, airmod: AirMod, ltr390: LTR390):
-#     while True:
-#         await airmod.has_data.wait()
-#         airmod.has_data.clear()
-#         data = airmod.data
-#         dprint("got airmod data")
-#         data.update(get_wifi_data(client))
-#         data.update(await get_ltr390_data(ltr390))
-#         dprint("got ltr390 data")
-#         asyncio.create_task(client.publish(state_topic.encode(), json.dumps(data).encode(), qos=1))  # do not block
-
 def get_wifi_data(client: MQTTClient) -> dict:
     attr_data = {"ip_address": client._sta_if.ifconfig()[0],
                  "ssid": client._sta_if.config('ssid'),
@@ -491,59 +301,6 @@ def get_wifi_data(client: MQTTClient) -> dict:
                  "txpower": client._sta_if.config('txpower'),
                  }
     return attr_data
-
-
-async def get_ltr390_data(ltr390: LTR390) -> dict:
-    re, rate = ltr390.get_resolution_rate()
-    if re == LTR390.RESOLUTION_13BIT_TIME12_5MS:
-        re = "13"
-    elif re == LTR390.RESOLUTION_16BIT_TIME25MS:
-        re = "16"
-    elif re == LTR390.RESOLUTION_17BIT_TIME50MS:
-        re = "17"
-    elif re == LTR390.RESOLUTION_18BIT_TIME100MS:
-        re = "18"
-    elif re == LTR390.RESOLUTION_19BIT_TIME200MS:
-        re = "19"
-    elif re == LTR390.RESOLUTION_20BIT_TIME400MS:
-        re = "20"
-
-    if rate == LTR390.RATE_25MS:
-        rate = "25ms"
-    elif rate == LTR390.RATE_50MS:
-        rate = "50ms"
-    elif rate == LTR390.RATE_100MS:
-        rate = "100ms"
-    elif rate == LTR390.RATE_200MS:
-        rate = "200ms"
-    elif rate == LTR390.RATE_500MS:
-        rate = "500ms"
-    elif rate == LTR390.RATE_1000MS:
-        rate = "1000ms"
-    elif rate == LTR390.RATE_2000MS:
-        rate = "2000ms"
-    gain = ltr390.get_gain()
-    if gain == LTR390.GAIN_1:
-        gain = "1"
-    elif gain == LTR390.GAIN_3:
-        gain = "3"
-    elif gain == LTR390.GAIN_6:
-        gain = "6"
-    elif gain == LTR390.GAIN_9:
-        gain = "9"
-    elif gain == LTR390.GAIN_18:
-        gain = "18"
-    attr_data = {
-        "light": await ltr390.read_als(),
-        "uv": await ltr390.read_uvs(),
-        "uvs_resolution": re,
-        "uvs_rate": rate,
-        "uvs_gain": gain,
-        "uvs_sensitivity_max": ltr390.sensitivity_max,
-        "Wfac": ltr390.wfac,
-    }
-    return attr_data
-
 
 async def handle_online(client: MQTTClient):
     # global ap
@@ -562,24 +319,7 @@ async def handle_offline():
         # await setup_ap(True)
 
 
-async def listen_mqtt(client: MQTTClient, ltr390: LTR390, bmp390: BMP3XX_I2C):
-    resolution_map = {
-        20: LTR390.RESOLUTION_20BIT_TIME400MS,
-        19: LTR390.RESOLUTION_19BIT_TIME200MS,
-        18: LTR390.RESOLUTION_18BIT_TIME100MS,
-        17: LTR390.RESOLUTION_17BIT_TIME50MS,
-        16: LTR390.RESOLUTION_16BIT_TIME25MS,
-        13: LTR390.RESOLUTION_13BIT_TIME12_5MS,
-    }
-    rate_map = {
-        "25ms": LTR390.RATE_25MS,
-        "50ms": LTR390.RATE_50MS,
-        "100ms": LTR390.RATE_100MS,
-        "200ms": LTR390.RATE_200MS,
-        "500ms": LTR390.RATE_500MS,
-        "1000ms": LTR390.RATE_1000MS,
-        "2000ms": LTR390.RATE_2000MS,
-    }
+async def listen_mqtt(client: MQTTClient):
     async for topic, msg, retained, properties in client.queue:
         if topic == command_topic.encode():
             dprint(f"Received command: {msg.decode()}")
@@ -588,49 +328,6 @@ async def listen_mqtt(client: MQTTClient, ltr390: LTR390, bmp390: BMP3XX_I2C):
             except:
                 dprint("Invalid JSON payload received in command topic")
                 continue
-            if "uvs_resolution" in payload:
-                dprint("change uvs_resolution")
-                uvs_resolution: int = int(payload["uvs_resolution"])
-                _, rate = ltr390.get_resolution_rate()
-                ltr390.set_resolution_rate(resolution_map[uvs_resolution], rate)
-            if "uvs_rate" in payload:
-                dprint("change uvs_rate")
-                uvs_rate: str = payload["uvs_rate"]
-                resolution, _ = ltr390.get_resolution_rate()
-                ltr390.set_resolution_rate(resolution, rate_map[uvs_rate])
-            if "Wfac" in payload:
-                dprint("change Wfac")
-                Wfac: float = payload["Wfac"]
-                ltr390.wfac = Wfac
-            if "uvs_gain" in payload:
-                dprint("change uvs_gain")
-                uvs_gain: int = int(payload["uvs_gain"])
-                if uvs_gain == 1:
-                    uvs_gain = LTR390.GAIN_1
-                elif uvs_gain == 3:
-                    uvs_gain = LTR390.GAIN_3
-                elif uvs_gain == 6:
-                    uvs_gain = LTR390.GAIN_6
-                elif uvs_gain == 9:
-                    uvs_gain = LTR390.GAIN_9
-                elif uvs_gain == 18:
-                    uvs_gain = LTR390.GAIN_18
-                ltr390.set_gain(uvs_gain)
-            if "uvs_sensitivity_max" in payload:
-                dprint("change uvs_sensitivity_max")
-                uvs_sensitivity_max = payload["uvs_sensitivity_max"]
-                ltr390.sensitivity_max = uvs_sensitivity_max
-            if "altitude" in payload:  # 气压传感器设置当前海拔
-                dprint("change altitude")
-                altitude: float = payload["altitude"]
-                while not bmp390.begin():
-                    dprint('Please check that the device is properly connected')
-                    await asyncio.sleep(3)
-                while not bmp390.set_common_sampling_mode(BMP3XX_I2C.ULTRA_PRECISION):
-                    dprint('Set samping mode fail, retrying...')
-                    await asyncio.sleep(3)
-                if bmp390.calibrated_absolute_difference(altitude):
-                    dprint("Absolute difference base value set successfully!")
             if "reset" in payload:
                 dprint("reset")
                 machine.reset()
@@ -683,11 +380,6 @@ async def listen_mqtt(client: MQTTClient, ltr390: LTR390, bmp390: BMP3XX_I2C):
 
 async def main(client: MQTTClient):
     try:
-        p23 = machine.Pin(23, machine.Pin.OUT)  # TSX0108E使能，高电平启动，但是要等开完机才能高电平，否则会死锁
-        p23.value(0)
-        await asyncio.sleep(2)
-        p23.value(1)
-        dprint("pullup oe")
         await client.connect()
         dprint("Connected to wifi.")
         await client.up.wait()
@@ -699,52 +391,13 @@ async def main(client: MQTTClient):
         await client.publish(discovery_topic.encode(), json.dumps(discovery_payload).encode(), retain=True, qos=1)
         await client.publish(availability_topic.encode(), b"online", retain=True, qos=1)
         dprint("online info published")
-        try:
-            airmod = AirMod(1, 17, 16)
-        except Exception as e:
-            dprint(f"create uart fail: {e}")
-            await client.publish(log_topic.encode(), f"create uart fail: {e}".encode())
-            return
-        dprint("Connected to airmod uart")
-        await client.publish(log_topic.encode(), b"Connected to airmod uart")
-        try:
-            i2c = machine.I2C(1, sda=machine.Pin(18), scl=machine.Pin(19), freq=400000)
-            ltr390 = LTR390(i2c, LTR390.GAIN_18, 1400, debug)
-            ltr390.set_thresh(5, 20)
-        except Exception as e:
-            dprint(f"create ltr390 iic fail: {e}")
-            await client.publish(log_topic.encode(), f"create ltr390 iic fail: {e}".encode())
-            return
-        dprint("Connected to ltr390 iic uv sensor")
-        await client.publish(log_topic.encode(), b"Connected to ltr390 iic uv sensor")
-        try:
-            i2c2 = machine.I2C(0, sda=machine.Pin(4), scl=machine.Pin(5), freq=40000)
-            bmp390 = BMP3XX_I2C(i2c2, 0x77, debug)
-            while not bmp390.begin():
-                dprint('Please check that the device is properly connected')
-                await asyncio.sleep(3)
-            while not bmp390.set_common_sampling_mode(BMP3XX_I2C.ULTRA_PRECISION):
-                dprint('Set samping mode fail, retrying...')
-                await asyncio.sleep(3)
-            if bmp390.calibrated_absolute_difference(280.0):
-                dprint("Absolute difference base value set successfully!")
-        except Exception as e:
-            dprint(f"create bmp390 iic fail: {e}")
-            await client.publish(log_topic.encode(), f"create bmp390 iic fail: {e}".encode())
-            return
-        dprint("Connected to bmp390 iic pressure sensor")
-        await client.publish(log_topic.encode(), b"Connected to bmp390 iic pressure sensor")
         t1 = asyncio.create_task(handle_online(client))
         # asyncio.create_task(handle_offline())
-        t2 = asyncio.create_task(listen_mqtt(client, ltr390, bmp390))
-        t3 = asyncio.create_task(read_airdmod(airmod))
-        t4 = asyncio.create_task(read_ltr390(ltr390))
-        t5 = asyncio.create_task(read_wifi(client))
-        t6 = asyncio.create_task(read_bmp390(bmp390))
-        t7 = asyncio.create_task(read_esp_info())
-        t8 = asyncio.create_task(publish_data(client))
-        await asyncio.gather(t1, t2, t3, t4, t5, t6, t7, t8)
-        # await read_sensors(client, airmod, ltr390)
+        t2 = asyncio.create_task(listen_mqtt(client))
+        t3 = asyncio.create_task(read_wifi(client))
+        t4 = asyncio.create_task(read_esp_info())
+        t5 = asyncio.create_task(publish_data(client))
+        await asyncio.gather(t1, t2, t3, t4, t5)
     except OSError as e:
         dprint(f"Connection failed: {str(e)}.")
         return
