@@ -6,7 +6,11 @@ import gc
 import binascii
 import hashlib
 import os
+import sys
+import ota.rollback
+
 gc.collect()
+ota.rollback.cancel()
 
 # import aiohttp
 import esp
@@ -650,6 +654,7 @@ async def listen_mqtt(client: MQTTClient, ltr390: LTR390, bmp390: BMP3XX_I2C):
                     continue
                 if url:
                     try:
+                        gc.collect()
                         import aiohttp
                         with open(filename, "wb") as f:
                             async with aiohttp.ClientSession() as session:
@@ -666,6 +671,14 @@ async def listen_mqtt(client: MQTTClient, ltr390: LTR390, bmp390: BMP3XX_I2C):
                     with open(filename, "w") as f:
                         f.write(content)
                 dprint("update done")
+            if "ota" in payload: #  {"ota": True, "url": "micropython.bin"}
+                try:
+                    gc.collect()
+                    import ota.update
+                    gc.collect()
+                    ota.update.from_file(payload["url"], reboot=True)
+                except Exception as e:  # 可能内存不够
+                    await client.publish(log_topic.encode(), str(e).encode())
 
 
 async def main(client: MQTTClient):
@@ -680,6 +693,7 @@ async def main(client: MQTTClient):
         await client.up.wait()
         client.up.clear()
         dprint("client ready")
+        await client.publish(log_topic.encode(), f"mpy version {sys.version}".encode())
         await client.subscribe(command_topic.encode(), qos=1)
 
         await client.publish(discovery_topic.encode(), json.dumps(discovery_payload).encode(), retain=True, qos=1)
