@@ -256,6 +256,12 @@ client = MQTTClient(config)
 
 sensor_state = {}  # global sensor state
 
+wdt = machine.WDT(timeout=30000) # 30 seconds watchdog
+
+async def update_wdt():
+    while True:
+        wdt.feed()
+        await asyncio.sleep(10)
 
 async def update_sensor_state(value: dict):
     global sensor_state
@@ -397,7 +403,8 @@ async def main(client: MQTTClient):
         t3 = asyncio.create_task(read_wifi(client))
         t4 = asyncio.create_task(read_esp_info())
         t5 = asyncio.create_task(publish_data(client))
-        await asyncio.gather(t1, t2, t3, t4, t5)
+        t6 = asyncio.create_task(update_wdt())
+        await asyncio.gather(t1, t2, t3, t4, t5, t6)
     except OSError as e:
         dprint(f"Connection failed: {str(e)}.")
         return
