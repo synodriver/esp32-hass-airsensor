@@ -94,7 +94,7 @@ command_topic = "%s/%s/%s/set" % (discovery_prefix, component, object_id)
 log_topic = "%s/%s/%s/log" % (discovery_prefix, component, object_id) # log topic for debug
 # ap = network.WLAN(network.AP_IF)  # fail back
 
-# async def setup_ap(activate=True):
+# async def setup_ap(activate=True):     
 #     """设置或关闭AP热点模式"""
 #     if activate:
 #         print(f"设置AP热点: {netconfig['ap_ssid']}")
@@ -400,14 +400,18 @@ client = MQTTClient(config)
 # def on_message(topic, msg, retained, properties=None):
 #     print((topic, msg, retained, properties))
 
-lock = asyncio.Lock()
 sensor_state = {}  # global sensor state
 
+wdt = machine.WDT(timeout=30000) # 30 seconds watchdog
+
+async def update_wdt():
+    while True:
+        wdt.feed()
+        await asyncio.sleep(10)
 
 async def update_sensor_state(value: dict):
     global sensor_state
-    async with lock:
-        sensor_state.update(value)
+    sensor_state.update(value)
         # print(f"Sensor {sensor} updated to {value}")
 
 
@@ -743,7 +747,8 @@ async def main(client: MQTTClient):
         t6 = asyncio.create_task(read_bmp390(bmp390))
         t7 = asyncio.create_task(read_esp_info())
         t8 = asyncio.create_task(publish_data(client))
-        await asyncio.gather(t1, t2, t3, t4, t5, t6, t7, t8)
+        t9 = asyncio.create_task(update_wdt())
+        await asyncio.gather(t1, t2, t3, t4, t5, t6, t7, t8, t9)
         # await read_sensors(client, airmod, ltr390)
     except OSError as e:
         dprint(f"Connection failed: {str(e)}.")
